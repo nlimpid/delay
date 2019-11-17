@@ -12,6 +12,7 @@ import (
 const (
 	cursorKey = "delay-cursor"
 	lastime   = "delay-lastime"
+	roundKey  = "delay-round"
 	//hSet
 )
 
@@ -35,9 +36,42 @@ type RDelayQueue struct {
 	Begin   time.Time
 	Done    chan bool
 	Cursor  int64
+	Round   int64
 	Ch      chan *RTask
 
 	rc redis.Client
+}
+
+func New() (*RDelayQueue, error) {
+	client := redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "", // no password set
+		DB:       0,  // use default DB
+	})
+
+	now := time.Now()
+	lastTimeStr, err := client.Get(lastime).Result()
+	if err != nil {
+		return nil, err
+	}
+	lastTimeI, _ := strconv.ParseInt(lastTimeStr, 10, 64)
+	lastTime := time.Unix(lastTimeI, 0)
+	delta := int64(now.Sub(lastTime).Seconds())
+
+	deltaIndex := delta % 3600
+	deltaRound := delta / 3600
+
+	curIndex, _ := client.Get(cursorKey).Int64()
+	curRound, _ := client.Get(roundKey).Int64()
+
+	return &RDelayQueue{
+		//Bucket: [3600][]Task{},
+		Begin:  now,
+		Done:   nil,
+		Cursor: curIndex + deltaIndex,
+		Round:  curRound + deltaRound,
+	}, nil
+
 }
 
 func (d *RDelayQueue) Run() {
@@ -70,10 +104,31 @@ func (d *RDelayQueue) Run() {
 			d.Begin = t
 			d.rc.Set(lastime, t, 0)
 
+			// get index
+			indexS := strconv.FormatInt(d.Cursor, 10)
+			// manipulate redis
+			value, err := d.rc.HGetAll(indexS + "round").Result()
+			if len(value) > 0 {
+				for k, v := range value {
+					ro, _ := strconv.ParseInt(v, 10, 64)
+					if ro <= 0+d.Round {
+						// get value
+						rsp, err := d.rc.HGet(indexS, k).Result()
+						if err != nil {
+							logrus.Errorf("get err: %v", err)
+							return
+						}
+						go d.ExecRaw(rsp, k)
+						d.rc.HDel(indexS)
+					} else {
+						d.rc.HIncrBy(indexS+"round", k, -1)
+					}
+				}
+			}
+
 			if len(d.Bucket[d.Cursor]) > 0 {
 
 				for k, v := range d.Bucket[d.Cursor] {
-					indexS := strconv.FormatInt(d.Cursor, 10)
 					if v.Round == 0 {
 						go d.Exec(v)
 						d.rc.HDel(indexS, v.ID)
@@ -88,6 +143,18 @@ func (d *RDelayQueue) Run() {
 			}
 		}
 	}
+}
+
+func (d *RDelayQueue) ExecRaw(s string, id string) {
+	t := RTask{
+		ID:    id,
+		Topic: "",
+		Value: []byte(s),
+	}
+	fmt.Printf("exec task id: %v, index: %v", t.ID, t.Index)
+
+	d.Ch <- &t
+
 }
 
 func (d *RDelayQueue) Exec(t RTask) {
