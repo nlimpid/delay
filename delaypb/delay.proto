@@ -1,0 +1,43 @@
+syntax = "proto3";
+import "google/protobuf/any.proto";
+
+package delaypb;
+
+
+service delay {
+    rpc AddTask(AddTaskReq) returns (AddTaskRsp) {}
+    rpc Notify(stream NotifyReq) returns (stream NotifyRsp) {}
+}
+
+
+message task {
+    string id = 1;
+    string topic = 2;
+    google.protobuf.Any params = 3;
+}
+
+message AddTaskReq {
+    task task = 1;
+    int64 delayTime = 2;
+}
+
+
+
+message AddTaskRsp {
+
+}
+
+
+enum status{
+    success = 0;
+    fail = 1;
+}
+
+message NotifyReq {
+    status s = 1;
+
+}
+
+message NotifyRsp {
+    task task = 1;
+}
