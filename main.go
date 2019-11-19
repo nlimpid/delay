@@ -21,9 +21,12 @@ func main() {
 	if err != nil {
 		logrus.Fatalf("listen err: %v", err.Error())
 	}
-	server := server.Server{}
+	server, err := server.NewServer()
+	if err != nil {
+		return
+	}
 	s := grpc.NewServer()
-	delaypb.RegisterDelayServer(s, &server)
+	delaypb.RegisterDelayServer(s, server)
 
 	go s.Serve(lis)
 	logrus.Infof("server1 listen on 127.0.0.1:8001")

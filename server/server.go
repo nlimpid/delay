@@ -7,7 +7,7 @@ import (
 
 type Server struct {
 	Q *queue.DelayQueue
-	Queue rqueue.RDelayQueue
+	Queue *rqueue.RDelayQueue
 }
 
 
@@ -20,7 +20,7 @@ func NewServer() (*Server, error) {
 
 	s := &Server{
 		Q:     q,
-		Queue: rqueue.RDelayQueue{},
+		Queue: &rqueue.RDelayQueue{},
 	}
 	return s, nil
 

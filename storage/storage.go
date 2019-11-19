@@ -23,6 +23,20 @@ func Init() (task.StorageS, error) {
 	if err != nil {
 		return nil, err
 	}
+	err = db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte(BucketTime))
+		if err != nil {
+			return err
+		}
+		_, err = tx.CreateBucketIfNotExists([]byte(BucketContent))
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
 	return &BoltDB{
 		db: db,
 	}, nil
@@ -37,7 +51,7 @@ func (b *BoltDB) AddTask(task task.Task) error {
 		}
 
 		bt := tx.Bucket([]byte(BucketTime))
-		err = bt.Put([]byte(task.ID), []byte(task.AbsTime.String()))
+		err = bt.Put([]byte(task.ID), []byte(task.AbsTime.Format(time.RFC3339Nano)))
 		return err
 	})
 	if err != nil {
@@ -84,28 +98,31 @@ func (b *BoltDB) Restore() ([3600][]task.Task, error) {
 	bucket :=[3600][]task.Task{}
 	err := b.db.View(func(tx *bolt.Tx) error {
 		bt := tx.Bucket([]byte(BucketTime))
-		bt.ForEach(func(k, v []byte) error {
-			absTime, _ := time.Parse( "2006-01-02 15:04:05.999999999 -0700 MST", string(v))
+		c := bt.Cursor()
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			absTime, _ := time.Parse( time.RFC3339Nano, string(v))
 			delayTime := int64(absTime.Sub(now))
 			// TODO: more precisely
 			if delayTime <= 10 {
+				fmt.Printf("need to exec: %v, %v\n", delayTime, string(k))
 				// exec
+				continue
 			}
 			index := delayTime % 3600
 			round := delayTime / 3600
 
-			task := task.Task{
+			ta := task.Task{
 				ID:           string(k),
 				Round:        round,
 				Index:        index,
 				AbsTime: absTime,
 			}
 
-			bucket[index] = append(bucket[index], task)
+
+				bucket[index] = append(bucket[index], ta)
 
 			fmt.Printf("key=%s, value=%s\n", k, v)
-			return nil
-		})
+		}
 		return nil
 	})
 	if err != nil {

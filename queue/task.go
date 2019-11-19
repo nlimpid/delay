@@ -71,12 +71,12 @@ func (d *DelayQueue) Run() {
 }
 
 func Exec(task task.Task) {
-	fmt.Printf("exec job: %s", task.Topic)
+	fmt.Printf("exec job: %s", task.Value)
 	return
 }
 
-func (d *DelayQueue) Add(topic string, absTime int64, value []byte) error {
-	delayTime := absTime - time.Now().Unix()
+func (d *DelayQueue) Add(topic string, absTime time.Time, value []byte) error {
+	delayTime := int64(absTime.Sub(time.Now()))
 	index := delayTime % 3600
 	round := delayTime / 3600
 	id := xid.New()
@@ -85,7 +85,7 @@ func (d *DelayQueue) Add(topic string, absTime int64, value []byte) error {
 		ID:           id.String(),
 		Round:        round,
 		Index:        index,
-		AbsoluteTime: absTime,
+		AbsTime: absTime,
 		Topic: topic,
 		Value: value,
 	}

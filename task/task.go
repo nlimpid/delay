@@ -21,7 +21,6 @@ type Task struct {
 	Round int64
 	Index int64
 	// epoch should exec
-	AbsoluteTime int64
 	AbsTime time.Time
 
 	Topic string
